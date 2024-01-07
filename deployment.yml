@@ -20,7 +20,7 @@ spec:
       - name: akash-insurance-container
         image: akashkbarik12/akash-insurance:latest
         ports:
-        - containerPort: 8081
+        - containerPort: 8080
         resources:
           limits:  
             cpu: 1000m
