@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: insurance-project
+  labels:
+    product: insureme
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: insurance
+      tier: web
+  template:
+    metadata:
+      labels:
+        app: insurance
+        tier: web
+    spec:
+      containers:
+      - name: akash-insurance-container
+        image: akashkbarik12/akash-insurance:latest
+        ports:
+        - containerPort: 8081
+        resources:
+          limits:  
+            cpu: 1000m
+            memory: 600Mi             
+          requests: 
+            cpu: 500m
+            memory: 300Mi
