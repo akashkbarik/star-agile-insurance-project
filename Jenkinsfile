@@ -1,65 +1,41 @@
-node{
-    
-    def mavenHome
-    def mavenCMD
-    def docker
-    def dockerCMD
-    def tagName
-    
-    stage('prepare enviroment'){
-        echo 'initialize all the variables'
-        mavenHome = tool name: 'maven' , type: 'maven'
-        mavenCMD = "${mavenHome}/bin/mvn"
-        docker = tool name: 'docker' , type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'
-        dockerCMD = "${docker}/bin/docker"
-        tagName="3.0"
-    }
-    
-    stage('git code checkout'){
-        try{
-            echo 'checkout the code from git repository'
-            git 'https://github.com/shubhamkushwah123/star-agile-insurance-project.git'
-        }
-        catch(Exception e){
-            echo 'Exception occured in Git Code Checkout Stage'
-            currentBuild.result = "FAILURE"
-            emailext body: '''Dear All,
-            The Jenkins job ${JOB_NAME} has been failed. Request you to please have a look at it immediately by clicking on the below link. 
-            ${BUILD_URL}''', subject: 'Job ${JOB_NAME} ${BUILD_NUMBER} is failed', to: 'shubham@gmail.com'
-        }
-    }
-    
-    stage('Build the Application'){
-        echo "Cleaning... Compiling...Testing... Packaging..."
-        //sh 'mvn clean package'
-        sh "${mavenCMD} clean package"        
-    }
-    
-    stage('publish test reports'){
-        publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: '/var/lib/jenkins/workspace/Capstone-Project-Live-Demo/target/surefire-reports', reportFiles: 'index.html', reportName: 'HTML Report', reportTitles: '', useWrapperFileDirectly: true])
-    }
-    
-    stage('Containerize the application'){
-        echo 'Creating Docker image'
-        sh "${dockerCMD} build -t shubhamkushwah123/insure-me:${tagName} ."
-    }
-    
-    stage('Pushing it ot the DockerHub'){
-        echo 'Pushing the docker image to DockerHub'
-        withCredentials([string(credentialsId: 'dock-password', variable: 'dockerHubPassword')]) {
-        sh "${dockerCMD} login -u shubhamkushwah123 -p ${dockerHubPassword}"
-        sh "${dockerCMD} push shubhamkushwah123/insure-me:${tagName}"
-            
-        }
-        
-    stage('Configure and Deploy to the test-server'){
-        ansiblePlaybook become: true, credentialsId: 'ansible-key', disableHostKeyChecking: true, installation: 'ansible', inventory: '/etc/ansible/hosts', playbook: 'ansible-playbook.yml'
-    }
-        
-        
-    }
+def containerName="akash-insurance"
+def tag="latest"
+def dockerHubUser="akashkbarik12"
+def gitURL='https://github.com/akashkbarik/star-agile-insurance-project.git'
+
+node {
+      stage('checkout') {
+	         git changelog: false, credentialsId: 'GitHubCreds', poll: false, url: 'https://github.com/akashkbarik/star-agile-insurance-project.git'
+	  }
+	  stage('build') {
+	         sh "mvn clean install"
+	  }
+	  stage('clean any existing docker image'){
+	         sh "docker image prune -f"
+	  }
+	  stage('build the docker image'){
+	         sh "docker build -t $containerName:$tag  --pull --no-cache ."
+			 echo  "*****image build sucessfully completed******"
+	  }
+	  stage('push to docker hub'){
+	         withCredentials([usernamePassword(credentialsId: 'dockerhubcreds', passwordVariable: 'dockerHubPass', usernameVariable: 'dockerHubUser')]) {
+                sh "docker login -u $dockerHubUser -p $dockerHubPass"
+				sh "docker tag $containerName:$tag $dockerHubUser/$containerName:$tag"
+				sh "docker push $dockerHubUser/$containerName:$tag"
+				echo "***********image push sucessfully done*********"
+				stash includes: '**/**.yml', name: 'service'
+				
+            }
+	  }
 }
-
-
-
-
+node("k8sjenkins"){
+      stage('deploy the container'){
+          unstash 'service'
+          
+                sh "sudo kubectl get nodes"
+                sh "sudo kubectl apply -f deployment.yml"
+                sh "sudo kubectl apply -f service.yml"
+	         
+	    }
+	  
+      }
